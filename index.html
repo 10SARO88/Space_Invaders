@@ -68,6 +68,11 @@
         /* Aggiunte media query per nascondere istruzioni specifiche */
         @media (max-width: 768px), (hover: none) and (pointer: coarse) { #instructions-screen p:nth-of-type(1) { display: none; } #instructions-screen p:nth-of-type(2) { display: none; } }
         @media (min-width: 769px) and (hover: hover) and (pointer: fine) { #instructions-screen p:nth-of-type(3) { display: none; } #instructions-screen p:nth-of-type(4) { display: none; } }
+        
+        /* Aggiunto per disabilitare tocchi sul gioco */
+        #game-container.game-active {
+            pointer-events: none;
+        }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </head>
@@ -205,15 +210,29 @@
         function stopAlienSound() { if (alienMoveSound && !alienMoveSound.paused) { alienMoveSound.pause(); alienMoveSound.currentTime = 0; } }
 
         // --- Funzioni Gioco ---
-        function movePlayer(event) { if (isGameOver || isPaused || !gameContainer) return; const gameRect = gameContainer.getBoundingClientRect(); let targetX = event.clientX - gameRect.left; const containerWidth = gameContainer.offsetWidth; const minX = playerShipWidth / 2; const maxX = containerWidth - playerShipWidth / 2; targetX = Math.max(minX, Math.min(maxX, targetX)); playerX = targetX; const visualX = playerX - playerShipWidth / 2; playerShip.style.transform = `translateX(${visualX}px)`; }
+        function movePlayer(event) { 
+            if (isGameOver || isPaused || !gameContainer) return; 
+            // Controlla se è un dispositivo mobile (non dovrebbe mai arrivare qui su mobile)
+            if (window.matchMedia('(max-width: 768px)').matches || window.matchMedia('(hover: none)').matches) {
+                return;
+            }
+            
+            const gameRect = gameContainer.getBoundingClientRect(); 
+            let targetX = event.clientX - gameRect.left; 
+            const containerWidth = gameContainer.offsetWidth; 
+            const minX = playerShipWidth / 2; 
+            const maxX = containerWidth - playerShipWidth / 2; 
+            targetX = Math.max(minX, Math.min(maxX, targetX)); 
+            playerX = targetX; 
+            const visualX = playerX - playerShipWidth / 2; 
+            playerShip.style.transform = `translateX(${visualX}px)`; 
+        }
+        
         function startMovingLeft() { if (isGameOver || isPaused) return; leftPressed = true; rightPressed = false; if (!mobileMoveInterval) { mobileMoveInterval = setInterval(mobileMovePlayer, 16); } }
         function startMovingRight() { if (isGameOver || isPaused) return; rightPressed = true; leftPressed = false; if (!mobileMoveInterval) { mobileMoveInterval = setInterval(mobileMovePlayer, 16); } }
         function stopMoving() { leftPressed = false; rightPressed = false; if (mobileMoveInterval) { clearInterval(mobileMoveInterval); mobileMoveInterval = null; } }
         function mobileMovePlayer() { if (isGameOver || isPaused || !gameContainer) return; const containerWidth = gameContainer.offsetWidth; const minX = playerShipWidth / 2; const maxX = containerWidth - playerShipWidth / 2; if (leftPressed) { playerX = Math.max(minX, playerX - MOBILE_MOVE_SPEED); } else if (rightPressed) { playerX = Math.min(maxX, playerX + MOBILE_MOVE_SPEED); } else { stopMoving(); return; } const visualX = playerX - playerShipWidth / 2; playerShip.style.transform = `translateX(${visualX}px)`; }
         function mobileShoot() { if (isGameOver || isPaused || !canShoot || mobileShootPressed) return; mobileShootPressed = true; handleShoot({ button: 0, preventDefault: () => {} }); clearTimeout(mobileShootTimeout); mobileShootTimeout = setTimeout(() => { mobileShootPressed = false; }, shootCooldown); }
-
-        // Non serve ricalcolare la griglia se le dimensioni sono fisse
-        // function recalculateAlienGrid() { ... }
 
         function createAlienFormation() {
             aliens.forEach(a => a.element?.remove()); aliens = [];
@@ -229,11 +248,6 @@
             // Misura esempio alieno (se necessario, ma con font fisso non dovrebbe servire)
             let sampleAlienWidth = 20; // Stima basata su 1.2rem
             let sampleAlienHeight = 20;
-            // Decommenta se vuoi rimisurare
-            /*
-            const sampleAlien = document.createElement('div'); sampleAlien.classList.add('alien'); sampleAlien.style.position = 'absolute'; sampleAlien.style.visibility = 'hidden'; sampleAlien.innerText = alienEmojis[0]; sky.appendChild(sampleAlien);
-            try { const sampleRect = sampleAlien.getBoundingClientRect(); if(sampleRect.width > 0) sampleAlienWidth = sampleRect.width; if(sampleRect.height > 0) sampleAlienHeight = sampleRect.height; } catch(e){} finally { sampleAlien.remove(); }
-            */
 
             for (let r = 0; r < alienRows; r++) { for (let c = 0; c < aliensPerRow; c++) { const alien = document.createElement('div'); alien.classList.add('alien'); const typeIndex = r % alienEmojis.length; alien.classList.add(`alien-type-${typeIndex % 5}`); alien.innerText = alienEmojis[typeIndex]; const currentAlienX = startX + c * alienSpacingX; const currentAlienY = alienStartY + r * alienSpacingY; alien.style.left = `${currentAlienX}px`; alien.style.top = `${currentAlienY}px`; sky.appendChild(alien); const alienData = { element: alien, x: currentAlienX, y: currentAlienY, width: sampleAlienWidth, height: sampleAlienHeight, type: typeIndex, id: `alien_${r}_${c}`, hit: false }; alien.dataset.id = alienData.id; aliens.push(alienData); } }
             alienDirection = 1; levelDisplay.textContent = `LEVEL: ${level}`; startAlienSound();
@@ -241,7 +255,37 @@
 
         function moveAliens() { if (isGameOver || isBossActive || isPaused || !gameContainer) { clearTimeout(alienMoveTimer); return; } let moveDown = false; let changeDirection = false; const containerWidth = gameContainer.offsetWidth; const aliveAliens = aliens.filter(a => !a.hit && a.element); if (aliveAliens.length === 0) { clearTimeout(alienMoveTimer); stopAlienSound(); return; } for (const alien of aliveAliens) { const nextX = alien.x + alienMoveStepX * alienDirection; const alienRightEdge = nextX + alien.width; if ((alienDirection === 1 && alienRightEdge > containerWidth - 10) || (alienDirection === -1 && nextX < 10)) { changeDirection = true; moveDown = true; break; } } if (changeDirection) { alienDirection *= -1; } for (const alien of aliveAliens) { if (moveDown) { alien.y += alienMoveStepY; } else { alien.x += alienMoveStepX * alienDirection; } if (alien.element) { alien.element.style.left = `${alien.x}px`; alien.element.style.top = `${alien.y}px`; } } clearTimeout(alienMoveTimer); alienMoveTimer = setTimeout(moveAliens, currentAlienMoveInterval); startAlienSound(); }
         function alienTryShoot() { if (isGameOver || isBossActive || isPaused) { clearTimeout(alienShootTimer); return; } const aliveAliens = aliens.filter(a => !a.hit && a.element); if (aliveAliens.length === 0) return; const columns = {}; aliveAliens.forEach(a => { const colKey = Math.floor(a.x / alienSpacingX); if (!columns[colKey]) { columns[colKey] = []; } columns[colKey].push(a); }); const shooters = []; for (const key in columns) { if (columns[key].length > 0) { let bottomAlien = columns[key].reduce((prev, current) => (prev.y > current.y) ? prev : current); shooters.push(bottomAlien); } } if (shooters.length > 0) { const randomShooter = shooters[Math.floor(Math.random() * shooters.length)]; const bullet = document.createElement('div'); bullet.classList.add('enemy-bullet'); sky.appendChild(bullet); const bulletStyle = window.getComputedStyle(bullet); const bulletWidth = parseFloat(bulletStyle.width) || 3; const bulletHeight = parseFloat(bulletStyle.height) || 8; const bulletX = randomShooter.x + randomShooter.width / 2 - bulletWidth / 2; const bulletY = randomShooter.y + randomShooter.height; bullet.style.left = `${bulletX}px`; bullet.style.top = `${bulletY}px`; const bulletData = { element: bullet, x: bulletX, y: bulletY, width: bulletWidth, height: bulletHeight, id: Date.now() + '_enemy' }; enemyBullets.push(bulletData); } clearTimeout(alienShootTimer); alienShootTimer = setTimeout(alienTryShoot, currentAlienShootInterval); }
-        function handleShoot(event) { if (((event.code && event.code === 'Space') || event.button === 0) && !isGameOver && canShoot && !isPaused) { event.preventDefault(); canShoot = false; setTimeout(() => { canShoot = true; }, shootCooldown); const bullet = document.createElement('div'); bullet.classList.add('bullet'); sky.appendChild(bullet); const bulletStyle = window.getComputedStyle(bullet); const bulletWidth = parseFloat(bulletStyle.width) || 3; const bulletHeight = parseFloat(bulletStyle.height) || 8; const bulletX = playerX - bulletWidth / 2; const bulletY = playerY - bulletHeight; bullet.style.left = `${bulletX}px`; bullet.style.top = `${bulletY}px`; const bulletData = { element: bullet, x: bulletX, y: bulletY, width: bulletWidth, height: bulletHeight, id: Date.now() + '_player' }; bullets.push(bulletData); playSound(shootSound); } }
+        function handleShoot(event) { 
+            if (isGameOver || isPaused || !canShoot) return;
+            
+            // Su mobile, solo il pulsante SPARA può sparare
+            if ((window.matchMedia('(max-width: 768px)').matches || window.matchMedia('(hover: none)').matches)) {
+                if (!mobileShootPressed) return;
+            } 
+            // Su desktop, solo spazio o click sinistro possono sparare
+            else {
+                if (!((event.code && event.code === 'Space') || event.button === 0)) return;
+            }
+            
+            event.preventDefault();
+            canShoot = false;
+            setTimeout(() => { canShoot = true; }, shootCooldown);
+            
+            const bullet = document.createElement('div');
+            bullet.classList.add('bullet');
+            sky.appendChild(bullet);
+            const bulletStyle = window.getComputedStyle(bullet);
+            const bulletWidth = parseFloat(bulletStyle.width) || 3;
+            const bulletHeight = parseFloat(bulletStyle.height) || 8;
+            const bulletX = playerX - bulletWidth / 2;
+            const bulletY = playerY - bulletHeight;
+            bullet.style.left = `${bulletX}px`;
+            bullet.style.top = `${bulletY}px`;
+            const bulletData = { element: bullet, x: bulletX, y: bulletY, width: bulletWidth, height: bulletHeight, id: Date.now() + '_player' };
+            bullets.push(bulletData);
+            playSound(shootSound);
+        }
+        
         function createExplosion(x, y, size = 1.5, color = '#ffa500') { const explosion = document.createElement('div'); explosion.classList.add('explosion'); explosion.innerText = '💥'; explosion.style.left = `${x}px`; explosion.style.top = `${y}px`; explosion.style.fontSize = `${size}rem`; explosion.style.color = color; sky.appendChild(explosion); setTimeout(() => { explosion.remove(); }, 300); createParticles(x, y, 15, color); }
         function checkAABBCollision(x1, y1, width1, height1, x2, y2, width2, height2) { if (width1 <= 0 || height1 <= 0 || width2 <= 0 || height2 <= 0) { return false; } return ( x1 < x2 + width2 && x1 + width1 > x2 && y1 < y2 + height2 && y1 + height1 > y2 ); }
         function updateScoreDisplay() { scoreDisplay.textContent = `SCORE: ${score}`; }
@@ -255,7 +299,6 @@
         function bossTryShoot() { if (!isBossActive || isGameOver || !bossData || bossData.health <= 0 || !bossData.element || isPaused) { clearTimeout(bossShootTimer); return; } const bullet = document.createElement('div'); bullet.classList.add('boss-bullet'); sky.appendChild(bullet); const bulletStyle = window.getComputedStyle(bullet); const bulletWidth = parseFloat(bulletStyle.width) || 5; const bulletHeight = parseFloat(bulletStyle.height) || 10; const bulletX = bossData.x + bossData.width / 2 - bulletWidth / 2; const bulletY = bossData.y + bossData.height; bullet.style.left = `${bulletX}px`; bullet.style.top = `${bulletY}px`; const bulletData = { element: bullet, x: bulletX, y: bulletY, width: bulletWidth, height: bulletHeight, id: Date.now() + '_boss' }; enemyBullets.push(bulletData); clearTimeout(bossShootTimer); const baseInterval = BOSS_SHOOT_INTERVAL / Math.sqrt(level); const randomDelay = (Math.random() - 0.5) * 400; const nextShootDelay = Math.max(300 / Math.sqrt(level), baseInterval + randomDelay); bossShootTimer = setTimeout(bossTryShoot, nextShootDelay); }
         function bossHit() { if (!isBossActive || !bossData || bossData.health <= 0 || isPaused || isGameOver) return; bossData.health--; score += BOSS_HIT_POINTS * level; updateScoreDisplay(); if(bossData.element) { bossData.element.classList.add('hit-visual'); setTimeout(() => { bossData.element?.classList.remove('hit-visual'); }, 100); const explosionX = bossData.x + Math.random() * bossData.width; const explosionY = bossData.y + Math.random() * bossData.height; createExplosion(explosionX, explosionY, 1.2, '#ff8c00'); } if (bossData.health <= 0) { bossDefeated(); } }
 
-        // --- bossDefeated CORRETTA ---
         function bossDefeated() {
             if (isGameOver) return; // Non fare nulla se il gioco è già finito
             clearTimeout(bossShootTimer);
@@ -404,6 +447,11 @@
                 updateScoreDisplay(); updateLivesDisplay(); levelDisplay.textContent = `LEVEL: ${level}`; updateBestScoreDisplay();
                 gameOverMessage.style.display = 'none'; pauseScreen.style.display = 'none'; bodyElement.style.cursor = 'none'; bodyElement.classList.add('game-active');
 
+                // Disabilita gli eventi sul game container su mobile
+                if (window.matchMedia('(max-width: 768px)').matches || window.matchMedia('(hover: none)').matches) {
+                    gameContainer.classList.add('game-active');
+                }
+
                 document.removeEventListener('mousemove', movePlayer); document.removeEventListener('keydown', handleKeyboardInput); document.removeEventListener('click', handleShoot); document.removeEventListener('touchmove', preventDefaultScroll);
                 document.addEventListener('mousemove', movePlayer); document.addEventListener('keydown', handleKeyboardInput); document.addEventListener('click', handleShoot); document.addEventListener('touchmove', preventDefaultScroll, { passive: false });
 
@@ -442,4 +490,5 @@
 
     </script>
 </body>
+</html>
 </html>
